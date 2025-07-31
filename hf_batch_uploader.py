@@ -34,6 +34,7 @@ class HuggingFaceBatchUploader:
                 "image_highquality": ("IMAGE",),
                 "image_lowquality": ("IMAGE",),
                 "image_watermarked": ("IMAGE",),
+                "image_pixiv": ("IMAGE",),
             }
         }
 
@@ -87,10 +88,19 @@ class HuggingFaceBatchUploader:
         if not os.path.isdir(base_folder):
             return (f"ERRO: A pasta base '{base_folder}' não existe.",)
 
-        subfolders = ["highquality", "lowquality", "watermarked"]
-        for sub in subfolders:
-            if not os.path.isdir(os.path.join(base_folder, sub)):
-                return (f"ERRO: A subpasta '{sub}' não foi encontrada em '{base_folder}'.",)
+        expected_subfolders = ["highquality", "lowquality", "watermarked", "pixiv"]
+        subfolders = []
+        for sub in expected_subfolders:
+            subfolder_path = os.path.join(base_folder, sub)
+            if os.path.isdir(subfolder_path):
+                subfolders.append(sub)
+            else:
+                print(f"[HF Uploader] Aviso: Subpasta '{sub}' não encontrada, será ignorada.")
+        
+        if not subfolders:
+            return (f"ERRO: Nenhuma das subpastas esperadas foi encontrada em '{base_folder}'.",)
+        
+        print(f"[HF Uploader] Pastas encontradas e que serão processadas: {subfolders}")
 
         log_file = os.path.join(base_folder, ".upload_log.json")
         uploaded_files_log = self.load_upload_log(log_file)
@@ -123,7 +133,9 @@ class HuggingFaceBatchUploader:
             with zipfile.ZipFile(zip_filepath, 'w', zipfile.ZIP_DEFLATED) as zf:
                 for subfolder_name in subfolders:
                     current_subfolder_path = os.path.join(base_folder, subfolder_name)
+                    print(f"[HF Uploader] Processando pasta: {subfolder_name}")
                     
+                    files_added_in_folder = 0
                     for base_name in base_names_for_batch:
                         actual_file_to_add = self.find_file_by_base_name(current_subfolder_path, base_name)
                         
@@ -131,8 +143,11 @@ class HuggingFaceBatchUploader:
                             file_path = os.path.join(current_subfolder_path, actual_file_to_add)
                             arcname = os.path.join(subfolder_name, actual_file_to_add)
                             zf.write(file_path, arcname)
+                            files_added_in_folder += 1
                         else:
                             print(f"[HF Uploader] Aviso: Arquivo com base '{base_name}' não encontrado em '{subfolder_name}'. Pulando.")
+                    
+                    print(f"[HF Uploader] {files_added_in_folder} arquivos adicionados da pasta {subfolder_name}")
             
             print(f"[HF Uploader] Fazendo upload de '{zip_filename}' para o repositório '{repo_id}'...")
             api = HfApi(token=hf_token)
